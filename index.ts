@@ -36,11 +36,13 @@ const main = async () => {
   }
 
   console.log('\n\nFinished')
-  console.log('Warnings:')
-  for (const w of warningList) {
-    console.log(`  ${toRelative(w.file)}`)
-    for (const m of w.messages) {
-      console.log(`    ${m}`)
+  if (warningList.length > 0) {
+    console.log('Warnings:')
+    for (const w of warningList) {
+      console.log(`  ${toRelative(w.file)}`)
+      for (const m of w.messages) {
+        console.log(`    ${m}`)
+      }
     }
   }
 }
