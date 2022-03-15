@@ -220,6 +220,9 @@ const extractInfoFromDefineComponent = (options: types.namedTypes.ObjectExpressi
 }
 
 const collectAndDeleteComponentImports = (ast: any, components: string[]) => {
+  const program = ast.program
+  if (!types.namedTypes.Program.assert(program)) return []
+
   const imports: types.namedTypes.ImportDeclaration[] = []
 
   visit(ast, {
@@ -269,6 +272,16 @@ const collectAndDeleteComponentImports = (ast: any, components: string[]) => {
       return false
     }
   })
+
+  const isAllImportDecls = program.body.every(
+    statement => types.namedTypes.ImportDeclaration.check(statement)
+  )
+  if (isAllImportDecls) {
+    // move all if there is only import decls
+    const all = [...imports, ...program.body] as types.namedTypes.ImportDeclaration[]
+    program.body = []
+    return all
+  }
 
   return imports
 }
