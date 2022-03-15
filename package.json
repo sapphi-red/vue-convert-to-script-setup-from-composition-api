@@ -1,0 +1,14 @@
+{
+  "name": "vue-convert-to-script-setup-from-composition-api",
+  "private": true,
+  "dependencies": {
+    "@vue/compiler-sfc": "^3.2.31",
+    "klaw": "^4.0.1",
+    "magic-string": "^0.26.1",
+    "recast": "^0.20.5"
+  },
+  "devDependencies": {
+    "@types/klaw": "^3.0.3",
+    "typescript": "^4.6.2"
+  }
+}
