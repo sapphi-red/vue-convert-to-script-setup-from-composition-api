@@ -228,11 +228,13 @@ const collectAndDeleteComponentImports = (ast: any, components: string[]) => {
         // side effect. so do not move to script setup
         return false
       }
-      let deleteIndex: number | undefined
+
+      const deleteIndices: number[] = []
       for (const [i, sp] of path.node.specifiers.entries()) {
-        // assumes vue component only uses 'default export'
         if (types.namedTypes.ImportDefaultSpecifier.check(sp)) {
-          if (components.includes(sp.local?.name ?? '')) {
+          const name = sp.local?.name ?? ''
+          // assumes vue component only uses 'default export'
+          if (components.includes(name)) {
             const declForSetup = b.importDeclaration(
               [
                 b.importDefaultSpecifier(sp.local)
@@ -241,15 +243,26 @@ const collectAndDeleteComponentImports = (ast: any, components: string[]) => {
               path.node.importKind
             )
             imports.push(declForSetup)
-            deleteIndex = i
+            deleteIndices.push(i)
+          }
+        } else if (types.namedTypes.ImportSpecifier.check(sp)) {
+          // delete `defineComponent` and `PropType`
+          const module = path.node.source.value
+          if (module !== 'vue') continue
+
+          const name = sp.imported.name
+          if (name === 'defineComponent' || name === 'PropType') {
+            deleteIndices.push(i)
           }
         }
       }
-      if (deleteIndex !== undefined) {
-        if (path.node.specifiers.length === 1) {
+      if (deleteIndices.length > 0) {
+        if (deleteIndices.length === path.node.specifiers.length) {
           path.prune()
         } else {
-          path.node.specifiers.splice(deleteIndex, 1)
+          for (const [i, v] of deleteIndices.entries()) {
+            path.node.specifiers.splice(v - i, 1)
+          }
           path.replace(path.node)
         }
       }
@@ -434,11 +447,19 @@ export const convert = async (path: string): Promise<string[]> => {
     setupContent += print(b.program(aliasesCode)).code
   }
 
+  const newScriptContent = print(ast).code
+
+  const scriptTagStart = content.lastIndexOf('<script', script.loc.start.offset)
   const scriptTagEnd = content.indexOf('</script>', script.loc.end.offset) + '</script>'.length
 
   const ms = new MagicString(content)
-  ms.appendRight(scriptTagEnd, `\n\n<script lang="ts" setup>\n${setupContent}\n</script>`)
-  ms.overwrite(script.loc.start.offset, script.loc.end.offset, print(ast).code)
+  if (newScriptContent.trim() === '') {
+    ms.remove(scriptTagStart, scriptTagEnd)
+  } else {
+    ms.overwrite(script.loc.start.offset, script.loc.end.offset, newScriptContent)
+    ms.appendRight(scriptTagEnd, '\n\n')
+  }
+  ms.appendRight(scriptTagEnd, `<script lang="ts" setup>\n${setupContent}\n</script>`)
   const newContent = ms.toString()
 
   await fs.writeFile(path, newContent, 'utf-8')
