@@ -135,8 +135,9 @@ const extractEmitInfo = (emits: types.namedTypes.ObjectExpression) => {
         typeAnnotation: b.tsTypeAnnotation(eventNameLiteralType)
       })
       const params = [eventNameParam, ...emit.value.params]
+      const returnType = b.tsTypeAnnotation(b.tsVoidKeyword())
       // @ts-expect-error should be ok
-      const t = b.tsCallSignatureDeclaration(params)
+      const t = b.tsCallSignatureDeclaration(params, returnType)
       emitTypes.push(t)
     } else if (
       types.namedTypes.ObjectMethod.check(emit) &&
