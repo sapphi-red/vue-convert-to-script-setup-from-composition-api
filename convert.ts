@@ -337,6 +337,11 @@ const collectReturnFromSetup = (
   return aliases
 }
 
+const createConstDeclarationIfNeeded = (doDecl: boolean, ident: string, init: any) => {
+  if (!doDecl) return init
+  return createConstDeclaration(ident, init)
+}
+
 const createConstDeclaration = (ident: string, init: any) => {
   return b.variableDeclaration('const', [
     b.variableDeclarator(b.identifier(ident), init)
@@ -344,6 +349,7 @@ const createConstDeclaration = (ident: string, init: any) => {
 }
 
 const createDefineProps = (
+  declareProps: boolean,
   propType: types.namedTypes.TSTypeLiteral,
   propDefaults: types.namedTypes.ObjectExpression | undefined
 ) => {
@@ -355,12 +361,22 @@ const createDefineProps = (
   // @ts-expect-error https://github.com/benjamn/ast-types/pull/358
   defineProps.typeParameters = typeParam
 
-  if (!propDefaults) return createConstDeclaration('props', defineProps)
+  if (!propDefaults) {
+    return createConstDeclarationIfNeeded(
+      declareProps,
+      'props',
+      defineProps
+    )
+  }
 
-  return createConstDeclaration('props', b.callExpression(
-    b.identifier('withDefaults'),
-    [defineProps, propDefaults]
-  ))
+  return createConstDeclarationIfNeeded(
+    declareProps,
+    'props',
+    b.callExpression(
+      b.identifier('withDefaults'),
+      [defineProps, propDefaults]
+    )
+  )
 }
 
 const createDefineEmits = (emitType: types.namedTypes.TSTypeLiteral) => {
@@ -373,6 +389,29 @@ const createDefineEmits = (emitType: types.namedTypes.TSTypeLiteral) => {
   defineEmits.typeParameters = typeParam
 
   return createConstDeclaration('emit', defineEmits)
+}
+
+const checkPropsIsUsed = (setupBody: types.namedTypes.BlockStatement | undefined) => {
+  if (!setupBody) return false
+
+  const propDecl = b.variableDeclaration('const', [
+    b.variableDeclarator(b.identifier('props'))
+  ])
+
+  let isUsed = false
+  visit(b.program([propDecl, ...setupBody.body]), {
+    visitIdentifier(path) {
+      if (types.namedTypes.VariableDeclarator.check(path.parentPath.node)) return false
+      if (path.node.name !== 'props') return false
+      const s = path.scope.lookup('props')
+      if (s.isGlobal) {
+        // top level props
+        isUsed = true
+      }
+      return false
+    }
+  })
+  return isUsed
 }
 
 export const convert = async (path: string): Promise<string[]> => {
@@ -444,8 +483,10 @@ export const convert = async (path: string): Promise<string[]> => {
 
   let setupContent = print(b.program(imports)).code
   if (propType) {
+    const isPropsUsed = checkPropsIsUsed(setupBody)
+
     setupContent += '\n\n'
-    setupContent += print(createDefineProps(propType, propDefaults)).code
+    setupContent += print(createDefineProps(isPropsUsed, propType, propDefaults)).code
   }
   if (emitType) {
     setupContent += '\n\n'
