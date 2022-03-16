@@ -513,7 +513,9 @@ export const convert = async (path: string): Promise<string[]> => {
     ms.overwrite(script.loc.start.offset, script.loc.end.offset, newScriptContent)
     ms.appendRight(scriptTagEnd, '\n\n')
   }
-  ms.appendRight(scriptTagEnd, `<script lang="ts" setup>\n${setupContent}\n</script>`)
+  if (setupContent.trim() !== '') {
+    ms.appendRight(scriptTagEnd, `<script lang="ts" setup>\n${setupContent}\n</script>`)
+  }
   const newContent = ms.toString()
 
   await fs.writeFile(path, newContent, 'utf-8')
