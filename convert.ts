@@ -296,6 +296,7 @@ const collectReturnFromSetup = (
   const returnIndex = body.body.findIndex(
     statement => types.namedTypes.ReturnStatement.check(statement)
   )
+  if (returnIndex === -1) return []
 
   const returnStatement = body.body[returnIndex]! as types.namedTypes.ReturnStatement
 
@@ -391,7 +392,7 @@ const createDefineEmits = (emitType: types.namedTypes.TSTypeLiteral) => {
   return createConstDeclaration('emit', defineEmits)
 }
 
-const checkPropsIsUsed = (setupBody: types.namedTypes.BlockStatement | undefined) => {
+const checkPropsIsUsed = (setupBody: types.namedTypes.BlockStatement | undefined, aliasesCode: types.namedTypes.VariableDeclaration[] = []) => {
   if (!setupBody) return false
 
   const propDecl = b.variableDeclaration('const', [
@@ -399,7 +400,7 @@ const checkPropsIsUsed = (setupBody: types.namedTypes.BlockStatement | undefined
   ])
 
   let isUsed = false
-  visit(b.program([propDecl, ...setupBody.body]), {
+  visit(b.program([propDecl, ...setupBody.body, ...aliasesCode]), {
     visitIdentifier(path) {
       if (types.namedTypes.VariableDeclarator.check(path.parentPath.node)) return false
       if (path.node.name !== 'props') return false
@@ -483,7 +484,7 @@ export const convert = async (path: string): Promise<string[]> => {
 
   let setupContent = print(b.program(imports)).code
   if (propType) {
-    const isPropsUsed = checkPropsIsUsed(setupBody)
+    const isPropsUsed = checkPropsIsUsed(setupBody, aliasesCode)
 
     setupContent += '\n\n'
     setupContent += print(createDefineProps(isPropsUsed, propType, propDefaults)).code
