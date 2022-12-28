@@ -58,6 +58,9 @@ const propValueToType = (key: string, propValue: any): TSTypeKind => {
     }
     throw new Error(`Cannot convert prop(${key}) constructor to type: ${propValue.name}`)
   }
+  if (types.namedTypes.NullLiteral.check(propValue)) {
+    return b.tsAnyKeyword()
+  }
   throw new Error(`Cannot convert prop(${key}) to type: ${propValue}`)
 }
 
