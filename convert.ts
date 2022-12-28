@@ -286,7 +286,7 @@ const collectAndDeleteComponentImports = (ast: any, components: string[]) => {
   return imports
 }
 
-type Alias = [string, ExpressionKind | PatternKind]
+type Alias = [string, ExpressionKind | PatternKind | types.namedTypes.ObjectMethod]
 
 const collectReturnFromSetup = (
   outputWarning: (msg: string) => void,
@@ -311,15 +311,16 @@ const collectReturnFromSetup = (
         outputWarning('  Spread operator is used in return statement of setup function. Should manually edit.')
         continue
       }
+      if (!assertStringLiteralOrIdentifier(prop.key)) {
+        outputWarning('  Dynamic key is used in return statement of setup function. Should manually edit.')
+        continue
+      }
       if (types.namedTypes.ObjectMethod.check(prop)) {
-        outputWarning('  Object method is used in return statement of setup function. Should manually edit.')
+        const keyName = getNameFromStringLiteralOrIdentifier(prop.key)
+        aliases.push([keyName, prop])
         continue
       }
       if (types.namedTypes.ObjectProperty.check(prop) || types.namedTypes.Property.check(prop)) {
-        if (!assertStringLiteralOrIdentifier(prop.key)) {
-          outputWarning('  Dynamic key is used in return statement of setup function. Should manually edit.')
-          continue
-        }
         if (prop.shorthand) continue
 
         const keyName = getNameFromStringLiteralOrIdentifier(prop.key)
@@ -344,6 +345,16 @@ const createConstDeclarationIfNeeded = (doDecl: boolean, ident: string, init: an
 }
 
 const createConstDeclaration = (ident: string, init: any) => {
+  if (types.namedTypes.ObjectMethod.check(init)) {
+    return b.functionDeclaration.from({
+      id: b.identifier(ident),
+      async: init.async,
+      params: init.params,
+      body: init.body,
+      returnType: init.returnType ?? null,
+      comments: init.comments ?? null,
+    })
+  }
   return b.variableDeclaration('const', [
     b.variableDeclarator(b.identifier(ident), init)
   ])
@@ -392,7 +403,7 @@ const createDefineEmits = (emitType: types.namedTypes.TSTypeLiteral) => {
   return createConstDeclaration('emit', defineEmits)
 }
 
-const checkPropsIsUsed = (setupBody: types.namedTypes.BlockStatement | undefined, aliasesCode: types.namedTypes.VariableDeclaration[] = []) => {
+const checkPropsIsUsed = (setupBody: types.namedTypes.BlockStatement | undefined, aliasesCode: (types.namedTypes.VariableDeclaration | types.namedTypes.FunctionDeclaration)[] = []) => {
   if (!setupBody) return false
 
   const propDecl = b.variableDeclaration('const', [
@@ -474,7 +485,7 @@ export const convert = async (path: string): Promise<string[]> => {
 
   const imports = collectAndDeleteComponentImports(ast, components)
 
-  let aliasesCode: types.namedTypes.VariableDeclaration[] | undefined
+  let aliasesCode: (types.namedTypes.VariableDeclaration | types.namedTypes.FunctionDeclaration)[] | undefined
   if (setupBody) {
     const aliases = collectReturnFromSetup(outputWarning, setupBody)
     if (aliases.length > 0) {
