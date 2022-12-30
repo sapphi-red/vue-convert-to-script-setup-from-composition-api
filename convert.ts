@@ -339,22 +339,28 @@ const collectReturnFromSetup = (
   return aliases
 }
 
+const convertObjectMethodToFunctionDeclaration = (ident: string, objectMethod: types.namedTypes.ObjectMethod) => {
+  return b.functionDeclaration.from({
+    id: b.identifier(ident),
+    body: objectMethod.body,
+    params: objectMethod.params,
+    async: objectMethod.async,
+    comments: objectMethod.comments ?? null,
+    defaults: objectMethod.defaults ?? [],
+    generator: objectMethod.generator,
+    loc: objectMethod.loc,
+    rest: objectMethod.rest ?? null,
+    returnType: objectMethod.returnType,
+    typeParameters: objectMethod.typeParameters ?? null,
+  })
+}
+
 const createConstDeclarationIfNeeded = (doDecl: boolean, ident: string, init: any) => {
   if (!doDecl) return init
   return createConstDeclaration(ident, init)
 }
 
 const createConstDeclaration = (ident: string, init: any) => {
-  if (types.namedTypes.ObjectMethod.check(init)) {
-    return b.functionDeclaration.from({
-      id: b.identifier(ident),
-      async: init.async,
-      params: init.params,
-      body: init.body,
-      returnType: init.returnType ?? null,
-      comments: init.comments ?? null,
-    })
-  }
   return b.variableDeclaration('const', [
     b.variableDeclarator(b.identifier(ident), init)
   ])
@@ -403,7 +409,7 @@ const createDefineEmits = (emitType: types.namedTypes.TSTypeLiteral) => {
   return createConstDeclaration('emit', defineEmits)
 }
 
-const checkPropsIsUsed = (setupBody: types.namedTypes.BlockStatement | undefined, aliasesCode: (types.namedTypes.VariableDeclaration | types.namedTypes.FunctionDeclaration)[] = []) => {
+const checkPropsIsUsed = (setupBody: types.namedTypes.BlockStatement | undefined, aliasesCode?: Array<types.namedTypes.VariableDeclaration | types.namedTypes.FunctionDeclaration>) => {
   if (!setupBody) return false
 
   const propDecl = b.variableDeclaration('const', [
@@ -411,7 +417,7 @@ const checkPropsIsUsed = (setupBody: types.namedTypes.BlockStatement | undefined
   ])
 
   let isUsed = false
-  visit(b.program([propDecl, ...setupBody.body, ...aliasesCode]), {
+  visit(b.program([propDecl, ...setupBody.body, ...(aliasesCode ?? [])]), {
     visitIdentifier(path) {
       if (types.namedTypes.VariableDeclarator.check(path.parentPath.node)) return false
       if (path.node.name !== 'props') return false
@@ -485,11 +491,16 @@ export const convert = async (path: string): Promise<string[]> => {
 
   const imports = collectAndDeleteComponentImports(ast, components)
 
-  let aliasesCode: (types.namedTypes.VariableDeclaration | types.namedTypes.FunctionDeclaration)[] | undefined
+  let aliasesCode: Array<types.namedTypes.VariableDeclaration | types.namedTypes.FunctionDeclaration> | undefined
   if (setupBody) {
     const aliases = collectReturnFromSetup(outputWarning, setupBody)
     if (aliases.length > 0) {
-      aliasesCode = aliases.map(([name, value]) => createConstDeclaration(name, value))
+      aliasesCode = aliases.map(([name, value]) => {
+        if (types.namedTypes.ObjectMethod.check(value)) {
+          return convertObjectMethodToFunctionDeclaration(name, value)
+        }
+        return createConstDeclaration(name, value)
+      })
     }
   }
 
