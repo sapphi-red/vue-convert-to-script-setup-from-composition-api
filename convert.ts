@@ -321,7 +321,7 @@ const collectAndDeleteComponentImports = (ast: any, components: string[]) => {
   return imports
 }
 
-type Alias = [string, ExpressionKind | PatternKind]
+type Alias = [string, ExpressionKind | PatternKind | types.namedTypes.ObjectMethod]
 
 const collectReturnFromSetup = (
   outputWarning: (msg: string) => void,
@@ -331,6 +331,7 @@ const collectReturnFromSetup = (
   const returnIndex = body.body.findIndex(
     statement => types.namedTypes.ReturnStatement.check(statement)
   )
+  if (returnIndex === -1) return []
 
   const returnStatement = body.body[returnIndex]! as types.namedTypes.ReturnStatement
 
@@ -345,15 +346,16 @@ const collectReturnFromSetup = (
         outputWarning('  Spread operator is used in return statement of setup function. Should manually edit.')
         continue
       }
+      if (!assertStringLiteralOrIdentifier(prop.key)) {
+        outputWarning('  Dynamic key is used in return statement of setup function. Should manually edit.')
+        continue
+      }
       if (types.namedTypes.ObjectMethod.check(prop)) {
-        outputWarning('  Object method is used in return statement of setup function. Should manually edit.')
+        const keyName = getNameFromStringLiteralOrIdentifier(prop.key)
+        aliases.push([keyName, prop])
         continue
       }
       if (types.namedTypes.ObjectProperty.check(prop) || types.namedTypes.Property.check(prop)) {
-        if (!assertStringLiteralOrIdentifier(prop.key)) {
-          outputWarning('  Dynamic key is used in return statement of setup function. Should manually edit.')
-          continue
-        }
         if (prop.shorthand) continue
 
         const keyName = getNameFromStringLiteralOrIdentifier(prop.key)
@@ -370,6 +372,22 @@ const collectReturnFromSetup = (
   }
 
   return aliases
+}
+
+const convertObjectMethodToFunctionDeclaration = (ident: string, objectMethod: types.namedTypes.ObjectMethod) => {
+  return b.functionDeclaration.from({
+    id: b.identifier(ident),
+    body: objectMethod.body,
+    params: objectMethod.params,
+    async: objectMethod.async,
+    comments: objectMethod.comments ?? null,
+    defaults: objectMethod.defaults ?? [],
+    generator: objectMethod.generator,
+    loc: objectMethod.loc,
+    rest: objectMethod.rest ?? null,
+    returnType: objectMethod.returnType ?? null,
+    typeParameters: objectMethod.typeParameters ?? null,
+  })
 }
 
 const createConstDeclarationIfNeeded = (doDecl: boolean, ident: string, init: any) => {
@@ -426,7 +444,7 @@ const createDefineEmits = (emitType: types.namedTypes.TSTypeLiteral) => {
   return createConstDeclaration('emit', defineEmits)
 }
 
-const checkPropsIsUsed = (setupBody: types.namedTypes.BlockStatement | undefined) => {
+const checkPropsIsUsed = (setupBody: types.namedTypes.BlockStatement | undefined, aliasesCode?: Array<types.namedTypes.VariableDeclaration | types.namedTypes.FunctionDeclaration>) => {
   if (!setupBody) return false
 
   const propDecl = b.variableDeclaration('const', [
@@ -434,7 +452,7 @@ const checkPropsIsUsed = (setupBody: types.namedTypes.BlockStatement | undefined
   ])
 
   let isUsed = false
-  visit(b.program([propDecl, ...setupBody.body]), {
+  visit(b.program([propDecl, ...setupBody.body, ...(aliasesCode ?? [])]), {
     visitIdentifier(path) {
       if (types.namedTypes.VariableDeclarator.check(path.parentPath.node)) return false
       if (path.node.name !== 'props') return false
@@ -516,17 +534,22 @@ export const convert = async (path: string): Promise<string[]> => {
 
   const imports = collectAndDeleteComponentImports(ast, components)
 
-  let aliasesCode: types.namedTypes.VariableDeclaration[] | undefined
+  let aliasesCode: Array<types.namedTypes.VariableDeclaration | types.namedTypes.FunctionDeclaration> | undefined
   if (setupBody) {
     const aliases = collectReturnFromSetup(outputWarning, setupBody)
     if (aliases.length > 0) {
-      aliasesCode = aliases.map(([name, value]) => createConstDeclaration(name, value))
+      aliasesCode = aliases.map(([name, value]) => {
+        if (types.namedTypes.ObjectMethod.check(value)) {
+          return convertObjectMethodToFunctionDeclaration(name, value)
+        }
+        return createConstDeclaration(name, value)
+      })
     }
   }
 
   let setupContent = print(b.program(imports)).code
   if (propType) {
-    const isPropsUsed = checkPropsIsUsed(setupBody)
+    const isPropsUsed = checkPropsIsUsed(setupBody, aliasesCode)
 
     setupContent += '\n\n'
     setupContent += print(createDefineProps(isPropsUsed, propType, propDefaults)).code
