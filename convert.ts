@@ -484,27 +484,35 @@ export const convert = async (path: string): Promise<string[]> => {
   const ast = parse(script.content, {
     parser: require('recast/parsers/typescript')
   })
-  visit(ast, {
-    visitExportDefaultDeclaration(path) {
-      if (!(
-        types.namedTypes.CallExpression.assert(path.node.declaration) &&
-        types.namedTypes.Identifier.assert(path.node.declaration.callee) &&
-        path.node.declaration.callee.name === 'defineComponent' &&
-        types.namedTypes.ObjectExpression.assert(path.node.declaration.arguments[0])
-      )) return false
 
-      const options = path.node.declaration.arguments[0]
-      const result = extractInfoFromDefineComponent(options)
-      components = result.components
-      setupBody = result.setupBody
-      propType = result.propType
-      propDefaults = result.propDefaults
-      emitType = result.emitType
+  try {
+    visit(ast, {
+      visitExportDefaultDeclaration(path) {
+        if (!(
+          types.namedTypes.CallExpression.check(path.node.declaration) &&
+          types.namedTypes.Identifier.check(path.node.declaration.callee) &&
+          path.node.declaration.callee.name === 'defineComponent' &&
+          types.namedTypes.ObjectExpression.check(path.node.declaration.arguments[0])
+        )) {
+          throw new Error('Does not support this expression of "export default"')
+        }
 
-      path.prune()
-      return false
-    }
-  })
+        const options = path.node.declaration.arguments[0]
+        const result = extractInfoFromDefineComponent(options)
+        components = result.components
+        setupBody = result.setupBody
+        propType = result.propType
+        propDefaults = result.propDefaults
+        emitType = result.emitType
+
+        path.prune()
+        return false
+      }
+    })
+  } catch (e: any) {
+    outputWarning(e.message)
+    return warnings
+  }
 
   const imports = collectAndDeleteComponentImports(ast, components)
 
