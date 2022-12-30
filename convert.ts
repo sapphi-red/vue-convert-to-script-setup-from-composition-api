@@ -55,6 +55,7 @@ const propValueToType = (key: string, propValue: any): TSTypeKind => {
     case 'Date': return b.tsTypeReference(b.identifier('Date'))
     case 'Function': return b.tsTypeReference(b.identifier('Function'))
     case 'Symbol': return b.tsSymbolKeyword()
+    case 'undefined': return b.tsAnyKeyword()
     }
     throw new Error(`Cannot convert prop(${key}) constructor to type: ${propValue.name}`)
   }
