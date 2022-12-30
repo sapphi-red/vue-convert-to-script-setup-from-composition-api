@@ -350,7 +350,7 @@ const convertObjectMethodToFunctionDeclaration = (ident: string, objectMethod: t
     generator: objectMethod.generator,
     loc: objectMethod.loc,
     rest: objectMethod.rest ?? null,
-    returnType: objectMethod.returnType,
+    returnType: objectMethod.returnType ?? null,
     typeParameters: objectMethod.typeParameters ?? null,
   })
 }
