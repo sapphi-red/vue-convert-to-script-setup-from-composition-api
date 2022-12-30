@@ -475,7 +475,7 @@ export const convert = async (path: string): Promise<string[]> => {
       }
     })
   } catch (e: any) {
-    warnings.push(e.message)
+    outputWarning(e.message)
     return warnings
   }
 
