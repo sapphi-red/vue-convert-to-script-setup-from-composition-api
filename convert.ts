@@ -158,6 +158,35 @@ const extractEmitInfo = (emits: types.namedTypes.ObjectExpression) => {
   return emitType
 }
 
+/**
+ * ['foo'] => (e: 'foo', ...values: any): void
+ */
+const extractEmitArrayInfo = (emits: types.namedTypes.ArrayExpression) => {
+  const emitTypes: types.namedTypes.TSCallSignatureDeclaration[] = []
+
+  for (const emit of emits.elements) {
+    if (types.namedTypes.StringLiteral.check(emit)) {
+      const eventNameLiteralType = b.tsLiteralType(b.stringLiteral(emit.value))
+      const eventNameParam = b.identifier.from({
+        name: 'e',
+        typeAnnotation: b.tsTypeAnnotation(eventNameLiteralType)
+      })
+      const eventValuesParam = b.identifier.from({
+        name: '...values',
+        typeAnnotation: b.tsTypeAnnotation(b.tsAnyKeyword())
+      })
+      const params = [eventNameParam, eventValuesParam]
+      const returnType = b.tsTypeAnnotation(b.tsVoidKeyword())
+      const t = b.tsCallSignatureDeclaration(params, returnType)
+      emitTypes.push(t)
+    } else {
+      throw new Error(`Unexpected emits: ${emit}`)
+    }
+  }
+  const emitType = emitTypes.length !== 0 ? b.tsTypeLiteral(emitTypes) : undefined
+  return emitType
+}
+
 const extractInfoFromDefineComponent = (options: types.namedTypes.ObjectExpression) => {
   const components: string[] = []
   let setupBody: types.namedTypes.BlockStatement | undefined
@@ -189,8 +218,10 @@ const extractInfoFromDefineComponent = (options: types.namedTypes.ObjectExpressi
           [propType, propDefaults] = extractPropInfo(prop.value)
         }
       } else if (keyName === 'emits') {
-        if (types.namedTypes.ObjectExpression.assert(prop.value)) {
+        if (types.namedTypes.ObjectExpression.check(prop.value)) {
           emitType = extractEmitInfo(prop.value)
+        } else if (types.namedTypes.ArrayExpression.assert(prop.value)) {
+          emitType = extractEmitArrayInfo(prop.value)
         }
       } else {
         throw new Error(`Unexpected prop name in object: ${keyName}`)
