@@ -343,11 +343,11 @@ const collectReturnFromSetup = (
   if (types.namedTypes.ObjectExpression.assert(returnStatement.argument)) {
     for (const prop of returnStatement.argument.properties) {
       if (types.namedTypes.SpreadElement.check(prop) || types.namedTypes.SpreadProperty.check(prop)) {
-        outputWarning('  Spread operator is used in return statement of setup function. Should manually edit.')
+        outputWarning('Spread operator is used in return statement of setup function. Should manually edit.')
         continue
       }
       if (!assertStringLiteralOrIdentifier(prop.key)) {
-        outputWarning('  Dynamic key is used in return statement of setup function. Should manually edit.')
+        outputWarning('Dynamic key is used in return statement of setup function. Should manually edit.')
         continue
       }
       if (types.namedTypes.ObjectMethod.check(prop)) {
@@ -367,7 +367,7 @@ const collectReturnFromSetup = (
         aliases.push([keyName, prop.value])
         continue
       }
-      outputWarning('  Not supported syntax is used in return statement of setup function. Should manually edit.')
+      outputWarning('Not supported syntax is used in return statement of setup function. Should manually edit.')
     }
   }
 
@@ -489,7 +489,7 @@ export const convert = async (path: string): Promise<string[]> => {
     return warnings
   }
   if (script.lang !== 'ts') {
-    outputWarning('  Does not support lang other than ts skipping')
+    outputWarning('Does not support lang other than ts skipping')
     return warnings
   }
 
